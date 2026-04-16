@@ -90,33 +90,57 @@ jobs:
         run: gradle test
 
   stage4-publish:
-    name: Stage 4 - Publish
-    runs-on: windows-latest
-    needs: [stage2-build]
-    if: always()
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  name: Stage 4 - Publish
+  runs-on: windows-latest
+  needs: [stage2-build]
+  if: always()
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: build-artifact
+        path: build/libs/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-          path: build/libs/
-
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: powershell
-        run: |
-          $jarFile = Get-ChildItem "build/libs/*.jar" | Select-Object -First 1
-          if ($jarFile) {
-            $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-            gh release create $tag `
-              --title "Release $tag" `
-              --notes "Auto-generated from commit ${{ github.sha }}" `
-              $jarFile.FullName
-            Write-Host "Published: $tag"
-          } else {
-            Write-Host "No JAR file to publish"
-          }
+    - name: Publish to GitHub Releases
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: powershell
+      run: |
+        $jarFile = Get-ChildItem "build/libs/*.jar" | Select-Object -First 1
+        if ($jarFile) {
+          $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+          $repo = "$env:GITHUB_REPOSITORY"
+          
+          # Create release
+          $body = @{
+            tag_name = $tag
+            name = "Release $tag"
+            body = "Auto-generated from commit $env:GITHUB_SHA"
+          } | ConvertTo-Json
+          
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" `
+            -Method Post `
+            -Headers @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = "application/vnd.github.v3+json"
+            } `
+            -Body $body `
+            -ContentType "application/json"
+          
+          # Upload JAR
+          $assetUrl = $release.upload_url -replace "{.+}$", ""
+          $fileName = $jarFile.Name
+          $fileBytes = [System.IO.File]::ReadAllBytes($jarFile.FullName)
+          
+          Invoke-RestMethod -Uri "$assetUrl?name=$fileName" `
+            -Method Post `
+            -Headers @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = "application/vnd.github.v3+json"
+              "Content-Type" = "application/java-archive"
+            } `
+            -Body $fileBytes
+          
+          Write-Host "Published: $tag"
+        } else {
+          Write-Host "No JAR file to publish"
+        }
