@@ -2,9 +2,12 @@ import os
 import sys
 import json
 import subprocess
+import re
 from github import Github
 
 def get_branch_type(branch):
+    if branch is None:
+        return None, None
     if branch.startswith('feature/'):
         return 'feature', 300
     elif branch.startswith('refactor/'):
@@ -21,15 +24,18 @@ def get_push_size():
         shell=True
     )
     output = result.stdout
-    import re
+    additions = 0
+    deletions = 0
     match = re.search(r'(\d+) insertions?', output)
-    additions = int(match.group(1)) if match else 0
+    if match:
+        additions = int(match.group(1))
     match = re.search(r'(\d+) deletions?', output)
-    deletions = int(match.group(1)) if match else 0
+    if match:
+        deletions = int(match.group(1))
     return additions + deletions
 
 def main():
-    with open(os.environ['GITHUB_EVENT_PATH']) as f:
+    with open(os.environ['GITHUB_EVENT_PATH'], 'r', encoding='utf-8') as f:
         event = json.load(f)
     
     branch = None
@@ -50,8 +56,12 @@ def main():
         size = get_push_size()
         print(f"Push to branch: {branch}, changes: {size}")
     
+    if branch is None:
+        print("Could not determine branch, skipping check")
+        sys.exit(0)
+    
     branch_type, limit = get_branch_type(branch)
-    if not branch_type:
+    if branch_type is None:
         print(f"Skip: unknown branch type {branch}")
         sys.exit(0)
     
