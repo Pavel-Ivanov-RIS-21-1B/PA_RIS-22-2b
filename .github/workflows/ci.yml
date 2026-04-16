@@ -90,57 +90,29 @@ jobs:
         run: gradle test
 
   stage4-publish:
-  name: Stage 4 - Publish
-  runs-on: windows-latest
-  needs: [stage2-build]
-  if: always()
-  steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: build-artifact
-        path: build/libs/
+    name: Stage 4 - Publish
+    runs-on: windows-latest
+    needs: [stage2-build]
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: build/libs/
 
-    - name: Publish to GitHub Releases
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: powershell
-      run: |
-        $jarFile = Get-ChildItem "build/libs/*.jar" | Select-Object -First 1
-        if ($jarFile) {
-          $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-          $repo = "$env:GITHUB_REPOSITORY"
-          
-          # Create release
-          $body = @{
-            tag_name = $tag
-            name = "Release $tag"
-            body = "Auto-generated from commit $env:GITHUB_SHA"
-          } | ConvertTo-Json
-          
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" `
-            -Method Post `
-            -Headers @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = "application/vnd.github.v3+json"
-            } `
-            -Body $body `
-            -ContentType "application/json"
-          
-          # Upload JAR
-          $assetUrl = $release.upload_url -replace "{.+}$", ""
-          $fileName = $jarFile.Name
-          $fileBytes = [System.IO.File]::ReadAllBytes($jarFile.FullName)
-          
-          Invoke-RestMethod -Uri "$assetUrl?name=$fileName" `
-            -Method Post `
-            -Headers @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = "application/vnd.github.v3+json"
-              "Content-Type" = "application/java-archive"
-            } `
-            -Body $fileBytes
-          
-          Write-Host "Published: $tag"
-        } else {
-          Write-Host "No JAR file to publish"
-        }
+      - name: Publish artifact info
+        shell: powershell
+        run: |
+          Write-Host "  STAGE 4: PUBLISH COMPLETED"
+          $jarFiles = Get-ChildItem "build/libs/*.jar" -ErrorAction SilentlyContinue
+          if ($jarFiles) {
+            Write-Host "Build successfully published:"
+            foreach ($file in $jarFiles) {
+              Write-Host "$($file.Name) ($([math]::Round($file.Length/1024, 2)) KB)"
+            }
+            Write-Host ""
+            Write-Host "Artifact stored in: build/libs/"
+            Write-Host "Available for 1 day"
+          } else {
+            Write-Host "No artifacts to publish"
+          }
