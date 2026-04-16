@@ -1,27 +1,59 @@
-import java.util.Scanner;
+plugins {
+    id 'java'
+    id 'application'
+    id 'checkstyle'
+}
 
-public class App {
-    public static void main(String[] args) {
-        System.out.println("=== Fibonacci Calculator (Recursive) ===\n");
-        
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter n (0-40): ");
-        int n = scanner.nextInt();
-        
-        System.out.println("\nFibonacci(" + n + ") = " + fib(n));
-        System.out.println("\nSequence up to " + n + ":");
-        
-        for (int i = 0; i <= n; i++) {
-            System.out.print(fib(i));
-            if (i < n) System.out.print(", ");
+group = 'com.example'
+version = '1.0.0'
+
+sourceSets {
+    main {
+        java {
+            srcDir '.'
+            include 'App.java'
         }
-        
-        System.out.println("\n\nGoodbye!");
-        scanner.close();
     }
-    
-    static int fib(int n) {
-        if (n <= 1) return n;
-        return fib(n - 1) + fib(n - 2);
+}
+
+application {
+    mainClass = 'App'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
     }
+}
+
+checkstyle {
+    toolVersion = '10.12.0'
+    configFile = file("${rootDir}/checkstyle.xml")
+    ignoreFailures = false
+}
+
+checkstyleMain {
+    source = fileTree('.')
+    include 'App.java'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'App'
+    }
+    from sourceSets.main.output
+}
+
+tasks.named('build') {
+    dependsOn checkstyleMain
 }
