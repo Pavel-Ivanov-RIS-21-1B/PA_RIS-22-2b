@@ -90,31 +90,33 @@ jobs:
         run: gradle test
 
   stage4-publish:
-  name: Stage 4 - Publish
-  runs-on: windows-latest
-  needs: [stage2-build]
-  if: always()
-  steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - uses: actions/download-artifact@v4
-      with:
-        name: build-artifact
-        path: build/libs/
-    
-    - name: Publish
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: powershell
-      run: |
-        $jarFile = Get-ChildItem "build/libs/*.jar" -ErrorAction SilentlyContinue
-        if ($jarFile) {
-          $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-          gh release create $tag --title "Build $tag" --notes "SHA: ${{ github.sha }}" $jarFile.FullName
-        } else {
-          Write-Host "No JAR file found"
-        }
+    name: Stage 4 - Publish
+    runs-on: windows-latest
+    needs: [stage2-build]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: build/libs/
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: powershell
+        run: |
+          $jarFile = Get-ChildItem "build/libs/*.jar" | Select-Object -First 1
+          if ($jarFile) {
+            $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+            gh release create $tag `
+              --title "Release $tag" `
+              --notes "Auto-generated from commit ${{ github.sha }}" `
+              $jarFile.FullName
+            Write-Host "Published: $tag"
+          } else {
+            Write-Host "No JAR file to publish"
+          }
