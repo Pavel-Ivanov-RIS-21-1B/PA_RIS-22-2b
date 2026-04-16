@@ -90,20 +90,29 @@ jobs:
         run: gradle test
 
   stage4-publish:
-    name: Stage 4 - Publish
-    runs-on: windows-latest
-    needs: [stage2-build]
-    if: always()
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-          path: build/libs/
-
-      - name: Publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: powershell
-        run: |
+  name: Stage 4 - Publish
+  runs-on: windows-latest
+  needs: [stage2-build]
+  if: always()
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - uses: actions/download-artifact@v4
+      with:
+        name: build-artifact
+        path: build/libs/
+    
+    - name: Publish
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: powershell
+      run: |
+        $jarFile = Get-ChildItem "build/libs/*.jar" | Select-Object -First 1
+        if ($jarFile) {
           $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-          gh release create $tag --title "Build $tag" --notes "SHA: ${{ github.sha }}" build/libs/*.jar
+          gh release create $tag --title "Build $tag" --notes "SHA: ${{ github.sha }}" $jarFile.FullName --repo $env:GITHUB_REPOSITORY
+        } else {
+          Write-Host "No JAR file found, skipping release"
+        }
