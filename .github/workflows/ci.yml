@@ -1,0 +1,94 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  stage1-code-style-and-mr-size:
+    name: Stage 1 - Code style & MR size
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install pygithub
+
+      - name: Run Checkstyle
+        run: .\gradlew.bat checkstyleMain checkstyleTest
+
+      - name: Check MR size
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/check_mr_size.py
+
+  stage2-build:
+    name: Stage 2 - Build
+    runs-on: windows-latest
+    needs: [stage1-code-style-and-mr-size]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Gradle
+        run: .\gradlew.bat clean build -x test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: build/libs/*.jar
+          retention-days: 1
+
+  stage3-tests:
+    name: Stage 3 - Tests
+    runs-on: windows-latest
+    needs: [stage2-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run tests
+        run: .\gradlew.bat test
+
+  stage4-publish:
+    name: Stage 4 - Publish
+    runs-on: windows-latest
+    needs: [stage2-build]
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: build/libs/
+
+      - name: Publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: powershell
+        run: |
+          $tag = "v$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+          gh release create $tag --title "Build $tag" --notes "SHA: ${{ github.sha }}" build/libs/*.jar
