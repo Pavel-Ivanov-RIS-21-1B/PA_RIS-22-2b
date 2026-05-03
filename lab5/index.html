@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>3 экрана</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .screen { display: none; }
+    .active { display: block; }
+    button { margin: 5px; padding: 10px; }
+    .task { border: 1px solid #ccc; margin: 10px 0; padding: 10px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <button onclick="showScreen('list')">Список задач</button>
+    <button onclick="showScreen('detail')">Детали задачи</button>
+    <button onclick="showScreen('stats')">Статистика</button>
+  </nav>
+
+  <div id="listScreen" class="screen">
+    <h2>Задачи</h2>
+    <input type="text" id="newTaskTitle" placeholder="Новая задача">
+    <button onclick="createTask()">Добавить</button>
+    <div id="tasksList"></div>
+  </div>
+
+  <div id="detailScreen" class="screen">
+    <h2>Детали задачи</h2>
+    <select id="taskSelect" onchange="loadTaskDetail()"></select>
+    <div id="taskDetail"></div>
+    <h3>Комментарии</h3>
+    <div id="commentsList"></div>
+    <input type="text" id="newComment" placeholder="Новый комментарий">
+    <button onclick="addComment()">💬 Добавить</button>
+  </div>
+
+  <div id="statsScreen" class="screen">
+    <h2>Статистика</h2>
+    <div id="statsInfo"></div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:3000';
+
+    function showScreen(name) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(name + 'Screen').classList.add('active');
+      if (name === 'list') loadTasks();
+      if (name === 'detail') loadTasksForSelect();
+      if (name === 'stats') loadStats();
+    }
+
+    // ЭКРАН 1
+    async function loadTasks() {
+      const res = await fetch(`${API}/tasks`);
+      const tasks = await res.json();
+      document.getElementById('tasksList').innerHTML = tasks.map(t => 
+        `<div class="task"><b>${t.title}</b> (${t.status})</div>`
+      ).join('');
+    }
+
+    async function createTask() {
+      const title = document.getElementById('newTaskTitle').value;
+      await fetch(`${API}/tasks`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title}) });
+      loadTasks();
+    }
+
+    // ЭКРАН 2
+    async function loadTasksForSelect() {
+      const res = await fetch(`${API}/tasks`);
+      const tasks = await res.json();
+      const select = document.getElementById('taskSelect');
+      select.innerHTML = tasks.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+      loadTaskDetail();
+    }
+
+    async function loadTaskDetail() {
+      const taskId = document.getElementById('taskSelect').value;
+      const [taskRes, commentsRes] = await Promise.all([
+        fetch(`${API}/tasks/${taskId}`),
+        fetch(`${API}/comments?taskId=${taskId}`)
+      ]);
+      const task = await taskRes.json();
+      const comments = await commentsRes.json();
+      
+      document.getElementById('taskDetail').innerHTML = `<div class="task"><h3>${task.title}</h3><p>Статус: ${task.status}</p></div>`;
+      document.getElementById('commentsList').innerHTML = comments.map(c => `<div>💬 ${c.text}</div>`).join('');
+    }
+
+    async function addComment() {
+      const taskId = document.getElementById('taskSelect').value;
+      const text = document.getElementById('newComment').value;
+      await fetch(`${API}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({task_id: taskId, text}) });
+      loadTaskDetail();
+    }
+
+    // ЭКРАН 3
+    async function loadStats() {
+      const res = await fetch(`${API}/stats`);
+      const stats = await res.json();
+      document.getElementById('statsInfo').innerHTML = `
+        <div class="task">📊 Всего задач: ${stats.total}</div>
+        <div class="task">🟢 Открыто: ${stats.open}</div>
+        <div class="task">✅ Выполнено: ${stats.done}</div>
+      `;
+    }
+
+    // Стартовый экран
+    showScreen('list');
+  </script>
+</body>
+</html>
